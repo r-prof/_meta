@@ -10,7 +10,28 @@ sync() {
   echo sync
 }
 
+print_usage() {
+  echo "Usage:"
+  echo
+  echo "$0 [subcommand]"
+  echo
+  echo "Supported subcommands:"
+  echo
+  echo "  init"
+  echo "  sync"
+}
+
+usage() {
+  print_usage 1>&2
+  exit 1
+}
+
 command=$1
+
+if [ "$command" = "" ]; then
+  usage
+fi
+
 shift
 
 case $command in
@@ -22,6 +43,5 @@ case $command in
       ;;
    *)
       usage
-      exit 1
       ;;
 esac
