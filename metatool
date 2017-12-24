@@ -3,6 +3,12 @@
 set -e
 set -x
 
+org_name=`
+  git remote -v |
+  head -n 1 |
+  sed -r 's#^.*[:/]([^/]*)/_meta.*$#\1#'
+`
+
 manyrepos_dir=.many
 manyrepos_branch=master
 metarepo_branch=meta
@@ -13,6 +19,12 @@ init() {
   do
     git subtree add --prefix=$project $manyrepos_dir/$project $manyrepos_branch
   done
+}
+
+populate() {
+  mkdir -p .many
+  find * -maxdepth 0 -type d |
+  parallel -I"{}" hub clone "${org_name}/{}" "${manyrepos_dir}/{}"
 }
 
 sync() {
@@ -28,8 +40,8 @@ sync() {
     check_merge $project
   done
 
-  ls $manyrepos_dir | parallel -I"{}" echo git subtree push --prefix="{}" $manyrepos_dir/"{}" $metarepo_branch
-  ls $manyrepos_dir | parallel -I"{}" git subtree push --prefix="{}" $manyrepos_dir/"{}" $metarepo_branch
+  ls $manyrepos_dir |
+  parallel -I"{}" git subtree push --prefix="{}" $manyrepos_dir/"{}" $metarepo_branch
 
   ls $manyrepos_dir |
   while read project
@@ -100,6 +112,9 @@ shift
 case $command in
    init)
       init $@
+      ;;
+   populate)
+      populate $@
       ;;
    sync)
       sync $@
