@@ -34,7 +34,7 @@ push() {
   (
     cd $manyrepos_dir/$project
     git merge $metarepo_branch --no-commit
-    git commit --no-edita
+    git commit --no-edit
   )
 }
 
