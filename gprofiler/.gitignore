@@ -1,0 +1,12 @@
+.Rproj.user
+.Rhistory
+.RData
+/.idea
+clion-test.R
+cmake-build-debug
+*.prof
+*.prof.out
+inst/doc
+src/pprof
+src/go/src/.idea/
+src/main.*

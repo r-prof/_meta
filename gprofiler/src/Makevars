@@ -1,0 +1,17 @@
+PKG_CPPFLAGS = -I.
+PKG_LIBS = -lprofiler
+
+CGO_CFLAGS = "$(ALL_CPPFLAGS)"
+CGO_LDFLAGS = "$(PKG_LIBS) $(SHLIB_LIBADD) $(LIBR)"
+GOPATH = $(CURDIR)/go
+
+-include Makevars.local
+
+all: $(SHLIB) ../inst/bin/pprof
+
+pprof: $(GO_SRC)
+	rm -f gotest.h
+	GOPATH=$(GOPATH) go build github.com/google/pprof
+
+../inst/bin/pprof: pprof
+	cp $< $@

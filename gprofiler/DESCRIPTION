@@ -1,0 +1,31 @@
+Package: gprofiler
+Title: Joint Profiling of Native and R Code
+Version: 0.0-1
+Authors@R: c(
+      person("Kirill", "Müller", role = c("aut", "cre"), email = "krlmlr+r@mailbox.org"),
+      person("Google, Inc.", role = "cph", comment = "Bundled pprof sources")
+    )
+Description: Simultaneously collects profiling data at both R and native levels
+    (using 'Rprof' and 'gprofiler') and provides a unified view of the collected data. Work in progress.
+License: GPL-3
+Encoding: UTF-8
+LazyData: true
+Date: 2017-01-18
+BugReports: https://github.com/r-prof/gprofiler/issues
+URL: https://github.com/r-prof/gprofiler, http://r-prof.github.io/gprofiler
+LinkingTo: Rcpp
+Imports:
+    dplyr,
+    profvis,
+    tidyr,
+    Rcpp
+SystemRequirements: C++11
+Suggests: 
+    DBI,
+    knitr,
+    rmarkdown,
+    RSQLite,
+    testthat
+VignetteBuilder: knitr
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 6.0.1

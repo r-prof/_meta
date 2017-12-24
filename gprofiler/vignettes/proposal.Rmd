@@ -1,0 +1,201 @@
+---
+title: "Joint profiling of native and R code"
+author: "Kirill Müller"
+date: "`r Sys.Date()`"
+output:
+  rmarkdown::pdf_document:
+    pandoc_args: "--variable=colorlinks"
+vignette: >
+  %\VignetteIndexEntry{Vignette Title}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+# The problem
+
+The [three rules of software optimization](http://www.moscowcoffeereview.com/programming/the-3-rules-of-optimization/) are:
+
+1. Don't.
+2. Don't do it yet.
+3. Profile before optimizing.
+
+This proposal discusses simplifying the application of these rules for R code that calls into native code.
+
+## Why is it a problem?
+
+R has excellent facilities for profiling R code: the main entry point is the [`Rprof()`](https://www.rdocumentation.org/packages/utils/versions/3.3.2/topics/Rprof) function that starts an execution mode where the R call stack is sampled periodically, optionally at source line level, and written to a file.
+Memory usage can also be collected.
+The results of a profiling run can be analyzed with `summaryRprof()`, or visualized using the `profvis`, `aprof`, or `GUIProfiler` packages.
+
+With `Rprof()`, the execution time of native code is only available as a bulk, without detailed source information.
+Conversely, when using a native code profiler such as [`gperftools`](https://gperftools.github.io/gperftools/cpuprofile.html) or [`callgrind`](http://valgrind.org/docs/manual/cl-manual.html), the resulting profile does not contain any link to the original R source code.
+The same applies to memory usage information.
+
+This project aims at bridging this gap with a drop-in replacement to `Rprof()` that records call stacks and memory usage information at both R and native levels, and later commingles them to present a unified view to the user.
+This drop-in replacement can be designed with support for multiple processes or threads in mind, another shortcoming of the current implementation of R's profiler.
+
+
+## Who does it affect?
+
+Calling native code from R is done mostly for one or both of the following reasons:
+
+1. A particular algorithm or library is implemented in C/C++/Fortran/..., the R code is mostly a wrapper around the native code. Examples:
+    - `RCurl` and `curl` wrap libcurl
+    - Database drivers such as `RSQLite` and `RMySQL` usually wrap native libraries
+    - `haven` wraps ReadStat, which reads foreign data formats
+    - `RcppCCTZ` wraps CCTZ, a modern library for handling time zones
+    - `RcppTOML` wraps cpptoml, a library to parse configuration files in the TOML language
+2. An implementation of a particular functionality in R is too slow for its application and is substituted by a faster native variant. Examples:
+    - `randomForest` has C and Fortran code at its core
+    - Sparse matrix (and other) algorithms in `Matrix`
+    - Converting a matrix to a data frame in `tibble`
+    - Fast reading of CSV and text files in `readr` and `data.table`
+    - Fast computation of groupwise aggregates in `dplyr` and `data.table`
+    - Graph algorithms in `igraph`
+
+Calls to native code from R packages are widespread:
+More than 500 CRAN packages consist mostly of C code, according to a [GitHub search](https://github.com/search?q=org%3Acran+language%3Ac&ref=searchresults&type=Repositories&utf8=%E2%9C%93).
+The [`Rcpp` package](https://cran.r-project.org/package=Rcpp), which makes it trivial to embed C++ code in a package, is currently used by over 900 CRAN packages.
+Furthermore, it is very easy to create a one-off C++ function for use in an analysis script with the help of `Rcpp::cppFunction()`.
+
+## What will solving the problem enable?
+
+Improved profiling facilities will greatly simplify the analysis and elimination of run time and memory bottlenecks in such code.[^rsqlite-slow]
+Over time, faster and less memory-hungry implementations will save computational resources or allow tackling larger problems.
+
+[^rsqlite-slow]:
+For example, with a performance regression in a development version of `RSQLite`, the R profiling results seemed inconclusive, because the extra run time was being spent during the evaluation of a promise.
+The C++ profiling results have indicated that time was spent evaluating R code, but of course not which particular R code.
+With unified profiling data, the problem would have been spotted much easier.
+
+
+# The plan
+
+A joint R/native profiler can be implemented based on the following outline:
+
+1. Sample stack traces simultaneously at both R and the native levels.
+1. Locate native calls (if available) in the R stack traces.
+1. Replace these by the relevant parts of the native stack traces.
+
+The `gprofiler` package, available on GitHub at https://github.com/r-prof/gprofiler, is a working proof of concept (currently only 64-bit Ubuntu Linux)
+for the seemingly tricky first step.[^daisy-chain]
+No change to base R is necessary to achieve this.
+As a result, a data frame of samples is returned where each row contains both R and native stack traces (separately in two columns).
+
+[^daisy-chain]:
+Technically, it works by calling `Rprof()`, which installs a `SIGPROF` signal handler, and then replacing this handler by one that captures the native stack trace (using the `gperftools` library) and then records the R stack trace (by invoking the handler originally installed by `Rprof()`).
+
+The native stack traces are currently generated using the `gperftools` library because it was easiest to get started with.
+The ultimate choice of native profiler will depend on other factors, such as platform interoperability (in particular Windows compatibility) and ease of integration.
+Regardless of this choice, the joint R/native profiler will create an `.Rprof` file compatible with those created by `Rprof()`, so that existing tools in the R ecosystem can be used to further analyze and visualize profiling results.
+For interoperability, the `proftools` package already offers a way to convert an `.Rprof` file to the format created by `callgrind` and understood by a number of tools outside the R ecosystem.
+
+
+The project includes the development of three R packages, see also the `gprofiler` [issue tracker](https://github.com/r-prof/gprofiler/issues) on GitHub:
+
+1. A profiler package with the `Rprof()` drop-in replacement, based on the technique demonstrated in `gprofiler`.
+    - Read the output of the native profiler (`*.prof` files for `gperftools`).
+    - Merge R and native call stacks.
+    - New feature: suspend and resume profiling.
+1. A wrapper package around the native profiling library to simplify installation on Windows (and perhaps other OS-es).
+1. A helper I/O package for reading, manipulating, and writing R profiler data.
+
+Splitting the work in smaller packages helps code reuse and allows better testing of the individual components.
+In particular, the I/O package can then be used by other packages or code without having to include a potentially heavy dependency.
+The code and intermediate format currently used by the `profvis` package can be used as a starting point, its maintainer Winston Chang has indicated [consent](https://github.com/rstudio/profvis/issues/74#issuecomment-264495380).
+
+Best practices, such as version control, continuous integration, and clean code, will be used throughout the project to ensure quality and maintainability.
+
+
+## Timeline
+
+The project's timeline corresponds to a full-time workload and does not reflect actual completion times.
+I expect to complete the project in roughly four months after acceptance, and to present final results at useR!2017 in Brussels.
+
+
+### Week 1
+
+- Initial blog post.
+- Review of other profiling libraries.
+- Test platform interoperability.
+- Wrapper package for profiling library.
+
+
+### Week 2
+
+- Read output of native profiler.
+
+
+### Week 3
+
+- Read, manipulate, and write output of R profiler.
+- Merge R and native profiler data.
+
+
+### Week 4
+
+- Roundtrips from R to native and back to R.
+- Further testing on Linux, OS X, and Windows.
+- Multiple processes and threads.
+- Ad-hoc functions.
+- Memory profiling.
+- On-the-fly reading of profiler data for realtime preview.
+
+
+### Week 5
+
+- Finalization, documentation.
+- Final blog post.
+- useR!2017 presentation.
+
+
+## Potential pitfalls
+
+Even with the encouraging results shown in the proof of concept, some open questions can only be answered as part of the project:
+
+1. Roundtrips from R to native code and then back to R currently are not recorded correctly by the native profiler. Additional investigation is necessary, it may be necessary to use specific compiler switches or even a specific compiler, or to patch the profiler library. In the worst case the profiler will assign all time spent in the native code to the R code that contains the native call.
+1. It is unclear if `gperftools` or other sampling profilers can be used successfully on non-Linux operating systems, in particular on Windows.  Reasonable efforts will be made to establish cross-platform compatibility, however in the worst case support for particular platforms may be restricted, and users will be instructed to use virtualization solutions.
+1. Some modes of operation, such as profiling of ad-hoc native functions created by `Rcpp::cppFunction()`, may not be fully supported.
+1. Integrated memory profiling is a desirable extra, but may not be achievable as part of the project.
+
+I expect to finish the "Improving DBI" project, funded by the ISC, by end of April.
+This project, if awarded, can then start right after that.
+I have submitted another proposal to the ISC, "Establishing DBI".
+Should both projects be accepted, I still expect to adhere to the estimated completion times.
+
+
+# How can the ISC help?
+
+I would like to ask for financial support for the implementation of the project and for attending one conference to present the results. Only open-source libraries will be considered, licensing fees are not an issue.
+
+Based on the timeline and the feature description, I would like to ask for USD 10’000 to cover the implementation costs.
+I will provide the equipment, backup funds are available to cover potential costs for replacement/repair.
+It would be great to present the work at useR!2017, I would also like to ask for reimbursement of the conference fee, accommodation, and transportation (approx. USD 1’000).
+
+
+# Dissemination
+
+The work will be continuously uploaded to GitHub, tested on r-hub, Travis-CI, and AppVeyor, and released to CRAN at the end of the project.
+GitHub seems to be very popular in the R community, its pull request mechanism allows contribution and code review in a very simple and convenient way.
+Maintainers of related packages (`profvis`, `aprof`, `proftools`, `GUIProfiler`, ...) will be contacted and involved in a very early stage of the project.
+Design questions will be discussed on GitHub.
+
+The newly implemented packages will be licensed under the MIT license to simplify their use for commercial purposes, except where linked or imported code requires a different licensing model.
+
+
+# Acknowledgments
+
+I would like to thank Hadley Wickham, who suggested to investigate joint profiling of R and native code, and also to Romain François who both gave feedback on an earlier version of the proposal.
+Thanks also to Winston Chang for supporting the extraction of code from his `profvis` package.
+
+
+# About the author
+
+I have a background in computer science, with more than 20 years of programming experience (mostly C++).
+I am currently working as a freelance IT consultant, and as a scientific assistant at the IVT, ETH Zurich.
+I am about to complete the "Improving DBI" project, courteously awarded by the ISC.
+Furthermore, I am currently maintaining the `tibble` package and contributing to the `dplyr` and other *tidyverse* packages.
+
+I have been using R for data processing and statistical modeling since 2012.
+During this time I contributed numerous patches to various R packages, co-maintained the `tikzDevice` and `ProjectTemplate` packages, and implemented a few of my own.
+My *r-appveyor* script helps automated testing of R packages on Windows.
