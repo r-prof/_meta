@@ -31,10 +31,11 @@ pull() {
 push() {
   project=$1
   git subtree push --prefix=$project $manyrepos_dir/$project $metarepo_branch
-  pushd $manyrepos_dir/$project
-  git merge $metarepo_branch --no-commit
-  git commit --no-edit
-  popd
+  (
+    cd $manyrepos_dir/$project
+    git merge $metarepo_branch --no-commit
+    git commit --no-edita
+  )
 }
 
 print_usage() {
