@@ -24,7 +24,7 @@ sync() {
   ls $manyrepos_dir |
   while read project
   do
-    check_push $project
+    check_clean $project
   done
   ls $manyrepos_dir |
   while read project
@@ -38,7 +38,7 @@ pull() {
   git subtree pull --prefix=$project $manyrepos_dir/$project $manyrepos_branch
 }
 
-check_push() {
+check_clean() {
   project=$1
   (
     cd $manyrepos_dir/$project
@@ -52,7 +52,12 @@ push() {
   (
     cd $manyrepos_dir/$project
     git merge $metarepo_branch --no-commit
-    git commit --no-edit
+    if ! check_clean
+    then
+      git commit --no-edit
+    else
+      git merge --abort || true
+    fi
   )
 }
 
