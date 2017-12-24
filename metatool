@@ -25,13 +25,16 @@ sync() {
   ls $manyrepos_dir |
   while read project
   do
-    check_push $project
+    check_merge $project
   done
+
+  ls $manyrepos_dir | parallel -I"{}" echo git subtree push --prefix="{}" $manyrepos_dir/"{}" $metarepo_branch
+  ls $manyrepos_dir | parallel -I"{}" git subtree push --prefix="{}" $manyrepos_dir/"{}" $metarepo_branch
 
   ls $manyrepos_dir |
   while read project
   do
-    push $project
+    merge $project
   done
 }
 
@@ -40,7 +43,7 @@ pull() {
   git subtree pull --prefix=$project $manyrepos_dir/$project $manyrepos_branch
 }
 
-check_push() {
+check_merge() {
   project=$1
   (
     cd $manyrepos_dir/$project
@@ -52,9 +55,8 @@ check_clean() {
   [ "`git status --porcelain | head -n 3`" = "" ]
 }
 
-push() {
+merge() {
   project=$1
-  git subtree push --prefix=$project $manyrepos_dir/$project $metarepo_branch
   (
     cd $manyrepos_dir/$project
     if [ "`git log ${manyrepos_branch}..${metarepo_branch} | head -n 3`" = "" ]
