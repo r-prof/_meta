@@ -55,12 +55,16 @@ push() {
   git subtree push --prefix=$project $manyrepos_dir/$project $metarepo_branch
   (
     cd $manyrepos_dir/$project
+    if [ "`git log ${manyrepos_branch}..${metarepo_branch}`" = "" ]
+    then
+      return
+    fi
     git merge $metarepo_branch --no-commit
     if ! check_clean
     then
       git commit --no-edit
     else
-      git merge --abort || true
+      git merge --abort
     fi
   )
 }
