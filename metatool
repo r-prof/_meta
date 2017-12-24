@@ -1,6 +1,7 @@
 #!/bin/sh
 
 set -e
+set -x
 
 manyrepos_dir=.many
 manyrepos_branch=master
