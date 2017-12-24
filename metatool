@@ -21,11 +21,13 @@ sync() {
   do
     pull $project
   done
+
   ls $manyrepos_dir |
   while read project
   do
     check_push $project
   done
+
   ls $manyrepos_dir |
   while read project
   do
