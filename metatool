@@ -24,7 +24,7 @@ sync() {
   ls $manyrepos_dir |
   while read project
   do
-    check_clean $project
+    check_push $project
   done
   ls $manyrepos_dir |
   while read project
@@ -38,12 +38,16 @@ pull() {
   git subtree pull --prefix=$project $manyrepos_dir/$project $manyrepos_branch
 }
 
-check_clean() {
+check_push() {
   project=$1
   (
     cd $manyrepos_dir/$project
-    [ "`git status --porcelain`" = "" ]
+    check_clean
   )
+}
+
+check_clean() {
+  [ "`git status --porcelain`" = "" ]
 }
 
 push() {
