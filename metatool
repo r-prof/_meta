@@ -1,0 +1,27 @@
+#!/bin/sh
+
+set -e
+
+init() {
+  echo init
+}
+
+sync() {
+  echo sync
+}
+
+command=$1
+shift
+
+case $command in
+   init)
+      init $@
+      ;;
+   sync)
+      sync $@
+      ;;
+   *)
+      usage
+      exit 1
+      ;;
+esac
