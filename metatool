@@ -2,8 +2,14 @@
 
 set -e
 
+manyrepos_dir=.many
+
 init() {
-  echo init
+  ls $manyrepos_dir |
+  while read path
+  do
+    git subtree add --prefix=$path $manyrepos_dir/$path master
+  done
 }
 
 sync() {
